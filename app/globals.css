@@ -1,0 +1,62 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light dark;
+}
+
+body {
+  @apply bg-slate-50 text-slate-900 antialiased;
+}
+
+/* Inline-rendered markdown (gap report preview).
+   Everything is sized and wrapped so the content fits the panel width — no
+   horizontal scrolling. Tables use a fixed layout so columns share the
+   available width and long cell text wraps instead of widening the table. */
+.markdown-body {
+  @apply text-sm leading-relaxed break-words;
+  overflow-wrap: anywhere;
+}
+.markdown-body h1 {
+  @apply text-lg font-semibold mt-4 mb-2;
+}
+.markdown-body h2 {
+  @apply text-base font-semibold mt-4 mb-2;
+}
+.markdown-body h3 {
+  @apply text-sm font-semibold mt-3 mb-1;
+}
+.markdown-body p {
+  @apply my-2;
+}
+.markdown-body ul {
+  @apply list-disc pl-5 my-2 space-y-1;
+}
+.markdown-body ol {
+  @apply list-decimal pl-5 my-2 space-y-1;
+}
+.markdown-body code {
+  @apply rounded bg-slate-100 px-1 py-0.5 text-xs;
+  overflow-wrap: anywhere;
+}
+.markdown-body pre {
+  @apply rounded bg-slate-100 p-3 my-2 text-xs;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.markdown-body pre code {
+  @apply bg-transparent p-0;
+}
+.markdown-body table {
+  @apply my-3 w-full border-collapse text-xs;
+  table-layout: fixed;
+}
+.markdown-body th,
+.markdown-body td {
+  @apply border border-slate-200 px-2 py-1 text-left align-top;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.markdown-body a {
+  @apply text-blue-600 underline;
+  overflow-wrap: anywhere;
+}
