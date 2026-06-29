@@ -100,9 +100,14 @@ async function invokeAws(
       "AGENT_RUNTIME_ARN is not set (required when AGENT_MODE=aws)",
     );
   }
-  const region = process.env.AWS_REGION;
+  // AGENT_AWS_REGION (not AWS_REGION): the latter is a reserved/restricted name on
+  // some platforms (e.g. Vercel, Lambda). We pass it explicitly to the SDK client
+  // below, so the SDK doesn't need to auto-read AWS_REGION from the environment.
+  const region = process.env.AGENT_AWS_REGION;
   if (!region) {
-    throw new Error("AWS_REGION is not set (required when AGENT_MODE=aws)");
+    throw new Error(
+      "AGENT_AWS_REGION is not set (required when AGENT_MODE=aws)",
+    );
   }
 
   const { BedrockAgentCoreClient, InvokeAgentRuntimeCommand } = await import(

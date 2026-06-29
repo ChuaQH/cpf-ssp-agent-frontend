@@ -75,7 +75,7 @@ AGENT_HTTP_URL=http://localhost:8080/invocations
 # Deployed AWS AgentCore runtime:
 AGENT_MODE=aws
 AGENT_RUNTIME_ARN=arn:aws:bedrock-agentcore:ap-southeast-1:<ACCOUNT_ID>:runtime/<name>
-AWS_REGION=ap-southeast-1
+AGENT_AWS_REGION=ap-southeast-1
 # + AWS credentials via the standard chain (env / SSO / role)
 ```
 
