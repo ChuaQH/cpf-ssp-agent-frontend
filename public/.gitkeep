@@ -1,0 +1,3 @@
+# This directory holds static assets served at the site root (e.g. /favicon.ico).
+# It is intentionally kept (even when empty) because the standard Next.js Docker
+# pipeline runs `COPY /app/public ./public`, which fails if the directory is absent.
