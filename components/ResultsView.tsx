@@ -109,8 +109,9 @@ export function ResultsView({ result, onReset }: Props) {
         <SummaryCards summary={result.summary ?? {}} />
       </section>
 
-      {/* Per-group status */}
-      {result.groups?.length > 0 && (
+      {/* Per-group status — absent when a stored assessment is reopened via
+          assess/result (the per-group table isn't persisted), so guard fully. */}
+      {result.groups && result.groups.length > 0 && (
         <section>
           <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
             Domain groups

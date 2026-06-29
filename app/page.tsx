@@ -1,11 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { callAgent } from "@/lib/client";
-import { isAgentError, type TiersResponse } from "@/lib/types";
+import {
+  isAgentError,
+  type AssessmentResult,
+  type TiersResponse,
+} from "@/lib/types";
 import { AssessmentForm } from "@/components/AssessmentForm";
 import { ProgressView } from "@/components/ProgressView";
 import { ResultsView } from "@/components/ResultsView";
+import { RefinePanel } from "@/components/RefinePanel";
+import { ProjectsList } from "@/components/ProjectsList";
 import { useAssessment } from "@/lib/use-assessment";
 
 type TiersState =
@@ -13,9 +20,18 @@ type TiersState =
   | { kind: "error"; message: string }
   | { kind: "ready"; data: TiersResponse };
 
+const CARD = "rounded-xl border border-slate-200 bg-white p-6 shadow-sm";
+
 export default function Home() {
   const [tiersState, setTiersState] = useState<TiersState>({ kind: "loading" });
-  const { state, start, reset } = useAssessment();
+  const { state, result, start, reset, applyRefine, showResult } =
+    useAssessment();
+  const router = useRouter();
+
+  // openProject: id currently being fetched (drives the list's row spinner) and
+  // any error from the fetch.
+  const [opening, setOpening] = useState<string | null>(null);
+  const [openError, setOpenError] = useState<string | null>(null);
 
   const loadTiers = useCallback(async () => {
     setTiersState({ kind: "loading" });
@@ -45,6 +61,58 @@ export default function Home() {
     void loadTiers();
   }, [loadTiers]);
 
+  // Reopen a stored assessment by id (pure read; no re-assessment). On success
+  // the result is shown via the hook, so ResultsView + RefinePanel render for it
+  // exactly as for a freshly-run assessment.
+  const openProject = useCallback(
+    async (project: string) => {
+      setOpenError(null);
+      setOpening(project);
+      try {
+        const resp = await callAgent<AssessmentResult>({
+          action: "assess/result",
+          project,
+        });
+        if (isAgentError(resp)) {
+          setOpenError(resp.error);
+          return;
+        }
+        showResult(resp);
+      } catch (e) {
+        setOpenError(
+          e instanceof Error ? e.message : `Could not open ${project}.`,
+        );
+      } finally {
+        setOpening(null);
+      }
+    },
+    [showResult],
+  );
+
+  // Reload-resume: on first mount, if the URL carries ?project=<id>, rehydrate it
+  // via assess/result. Read straight from window.location (not useSearchParams) so
+  // the page needs no Suspense boundary; the URL + assess/result are the source of
+  // truth, so no large result is persisted to localStorage. Run once.
+  const rehydrated = useRef(false);
+  useEffect(() => {
+    if (rehydrated.current) return;
+    rehydrated.current = true;
+    const pid = new URLSearchParams(window.location.search).get("project");
+    if (pid) void openProject(pid);
+  }, [openProject]);
+
+  // Keep the URL in sync with the displayed project so a completed/reopened
+  // assessment survives reload and is shareable. Guarded against redundant
+  // navigations (and so rehydration doesn't loop).
+  useEffect(() => {
+    const current = new URLSearchParams(window.location.search).get("project");
+    const want = result?.project ?? null;
+    if (want === current) return;
+    router.replace(want ? `/?project=${encodeURIComponent(want)}` : "/", {
+      scroll: false,
+    });
+  }, [result, router]);
+
   const running = state.kind === "running";
 
   return (
@@ -60,23 +128,38 @@ export default function Home() {
         </p>
       </header>
 
-      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        {/* Results take over the panel when done. */}
-        {state.kind === "done" ? (
-          <ResultsView result={state.result} onReset={reset} />
-        ) : running ? (
+      {result ? (
+        // A result is shown (from a completed run or a reopened project),
+        // regardless of run state.
+        <>
+          <div className={CARD}>
+            <ResultsView result={result} onReset={reset} />
+          </div>
+          <RefinePanel project={result.project} onRefined={applyRefine} />
+        </>
+      ) : running ? (
+        <div className={CARD}>
           <ProgressView
             stage={state.stage}
             phase={state.phase}
             message={state.message}
             resumed={state.resumed}
           />
-        ) : (
-          <>
+        </div>
+      ) : (
+        <>
+          <div className={CARD}>
             {state.kind === "error" && (
               <div className="mb-5 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
                 <span className="font-medium">Assessment failed:</span>{" "}
                 {state.message}
+              </div>
+            )}
+
+            {openError && (
+              <div className="mb-5 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                <span className="font-medium">Could not open project:</span>{" "}
+                {openError}
               </div>
             )}
 
@@ -90,9 +173,7 @@ export default function Home() {
             {tiersState.kind === "error" && (
               <div className="space-y-3">
                 <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-                  <span className="font-medium">
-                    Could not load SSP tiers:
-                  </span>{" "}
+                  <span className="font-medium">Could not load SSP tiers:</span>{" "}
                   {tiersState.message}
                 </div>
                 <button
@@ -111,9 +192,12 @@ export default function Home() {
                 onSubmit={start}
               />
             )}
-          </>
-        )}
-      </div>
+          </div>
+
+          {/* Past assessments — reopen any to view/refine without re-running. */}
+          <ProjectsList onOpen={openProject} openingProject={opening} />
+        </>
+      )}
 
       <footer className="mt-6 text-center text-xs text-slate-400">
         Calls run through this app&apos;s server route — no credentials or PATs

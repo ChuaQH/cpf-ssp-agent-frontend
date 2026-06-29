@@ -85,9 +85,12 @@ export type AssessmentResult = {
   tier: string;
   summary: Record<string, number>;
   blocking_findings: number;
-  hosting_used: HostingUsed;
-  groups: AssessmentGroup[];
-  remediation_summary?: Record<string, unknown>;
+  // null when reopened via assess/result with no detected hosting
+  hosting_used: HostingUsed | null;
+  // optional: assess/result (reopening a stored assessment) does NOT return the
+  // per-group table — it isn't persisted — so ResultsView must tolerate absence.
+  groups?: AssessmentGroup[];
+  remediation_summary?: Record<string, unknown> | null;
   // server-side paths — informational only, never used for downloads
   artifacts?: Record<string, unknown>;
   files: Record<string, AgentFile>;
@@ -106,12 +109,55 @@ export type JobStatusResponse = {
   error?: string;
 };
 
+// --- project history (list-projects / assess/result) -------------------------
+
+export type ProjectSummary = {
+  project: string;
+  updated_at: string; // ISO8601
+};
+
+export type ListProjectsResponse = {
+  count: number;
+  projects: ProjectSummary[]; // newest first
+};
+
+// assess/result returns an AssessmentResult (with groups absent — see that type).
+
+// --- refine -------------------------------------------------------------------
+
+export type ChatTurn = {
+  role: "user" | "assistant";
+  content: string;
+};
+
+export type RefineResponse = {
+  project: string;
+  // assistant's plain-text summary of what changed (markdown)
+  reply: string;
+  // control verdicts changed this turn
+  changed_control_ids: string[];
+  // remediation steps changed this turn
+  changed_remediation_ids: string[];
+  remediation_updated: boolean;
+  // FULL transcript: the history we sent + this turn's user + assistant messages
+  history: ChatTurn[];
+  // present only when verdicts changed
+  summary?: Record<string, number>;
+  blocking_findings?: number;
+  // present only when artifacts were regenerated — a PARTIAL map of just the
+  // changed files (same entry shape as AssessmentResult.files):
+  //   verdict change     → gap_report_md, filled_ssp, assessment_results_json
+  //   remediation change → remediation_plan_md, remediation_plan_json
+  files?: Record<string, AgentFile>;
+};
+
 // --- request payloads ---------------------------------------------------------
 
 export type AgentAction =
   | "tiers"
   | "workspace/clone"
   | "assess/full/start"
-  | "job/status";
+  | "job/status"
+  | "refine";
 
 export type AgentPayload = { action: AgentAction; [key: string]: unknown };

@@ -8,6 +8,7 @@ import {
   type AssessStartResponse,
   type CloneResponse,
   type JobStatusResponse,
+  type RefineResponse,
 } from "./types";
 
 export type AssessmentInput = {
@@ -22,6 +23,12 @@ export type AssessmentInput = {
 
 export type RunStage = "cloning" | "starting" | "assessing";
 
+// The run state machine tracks the *assessment flow* (clone → start → poll). The
+// displayed `result` is intentionally NOT part of it: a result can come from a
+// completed run OR from openProject (assess/result) rehydrating a stored
+// assessment, so it lives as a separate field that both sources populate. There
+// is no "done" stage — once a result is set, the page shows it regardless of run
+// state, and the run machine returns to idle.
 export type RunState =
   | { kind: "idle" }
   | {
@@ -31,7 +38,6 @@ export type RunState =
       message?: string;
       resumed?: boolean;
     }
-  | { kind: "done"; result: AssessmentResult }
   | { kind: "error"; message: string };
 
 const POLL_INTERVAL_MS = 4000;
@@ -80,6 +86,10 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export function useAssessment() {
   const [state, setState] = useState<RunState>({ kind: "idle" });
+  // The displayed assessment, decoupled from the run machine (see RunState).
+  // Populated by a completed run, by openProject/showResult, and patched by
+  // applyRefine. When non-null, the page renders ResultsView + RefinePanel.
+  const [result, setResult] = useState<AssessmentResult | null>(null);
   // Generation counter: bumped to cancel any in-flight polling loop (e.g. on a
   // new run or reset). Each loop captures its generation and stops if superseded.
   const genRef = useRef(0);
@@ -130,7 +140,8 @@ export function useAssessment() {
         if (resp.status === "completed") {
           clearInFlight();
           if (resp.result) {
-            setState({ kind: "done", result: resp.result });
+            setResult(resp.result);
+            setState({ kind: "idle" });
           } else {
             setState({
               kind: "error",
@@ -274,7 +285,52 @@ export function useAssessment() {
   const reset = useCallback(() => {
     genRef.current += 1; // cancel any running poll
     clearInFlight();
+    setResult(null);
     setState({ kind: "idle" });
+  }, []);
+
+  // Show a result fetched from elsewhere (openProject → assess/result). Cancels
+  // any in-flight run and clears the inflight marker so the two can't fight over
+  // the display.
+  const showResult = useCallback((r: AssessmentResult) => {
+    genRef.current += 1;
+    clearInFlight();
+    setState({ kind: "idle" });
+    setResult(r);
+  }, []);
+
+  // Patch the displayed result with a refine turn's regenerated artifacts so
+  // ResultsView (downloads + gap-report preview) reflects the edit immediately,
+  // without re-running the assessment. In-memory only: the merge lives on the
+  // React `result` state. Reloading rehydrates from assess/result via the URL,
+  // which re-derives files from the latest stored (refined) state — so the edit
+  // is durable on the agent even though this in-memory merge isn't. No-op unless
+  // a result is currently shown.
+  const applyRefine = useCallback((resp: RefineResponse) => {
+    setResult((prev) => {
+      if (prev === null) return prev;
+      // Override only the changed file keys (resp.files is a partial map).
+      const files = resp.files ? { ...prev.files, ...resp.files } : prev.files;
+      // Replace summary/blocking only when verdicts changed (use ?? so a real 0
+      // blocking count is honoured, not treated as "absent").
+      const summary = resp.summary ?? prev.summary;
+      const blocking_findings = resp.blocking_findings ?? prev.blocking_findings;
+      // Re-derive remediation_summary from the regenerated remediation-plan.json.
+      let remediation_summary = prev.remediation_summary;
+      if (resp.remediation_updated && resp.files?.remediation_plan_json) {
+        try {
+          const parsed = JSON.parse(
+            resp.files.remediation_plan_json.content,
+          ) as { summary?: Record<string, unknown> };
+          if (parsed && typeof parsed.summary === "object") {
+            remediation_summary = parsed.summary;
+          }
+        } catch {
+          /* malformed JSON — keep the prior remediation summary */
+        }
+      }
+      return { ...prev, files, summary, blocking_findings, remediation_summary };
+    });
   }, []);
 
   // On mount, resume an in-flight job if one is persisted (page refresh).
@@ -299,5 +355,5 @@ export function useAssessment() {
     );
   }, [pollUntilDone]);
 
-  return { state, start, reset };
+  return { state, result, start, reset, applyRefine, showResult };
 }

@@ -5,15 +5,25 @@ import { invokeAgent } from "@/lib/agent";
 export const runtime = "nodejs";
 // Each call is short, but never cache agent responses.
 export const dynamic = "force-dynamic";
+// Most actions return in well under a second (clone, start, each poll). The
+// exception is "refine": one synchronous LLM turn that can take up to ~a minute.
+// Give the route a generous budget so a refine turn isn't cut off. (The long
+// assess/full work still runs async on the agent via assess/full/start + polling,
+// so this ceiling only ever bounds a single refine turn.)
+export const maxDuration = 120;
 
-// Only these four actions are reachable through this app. Anything else is
-// rejected before it touches the agent — keeps the synchronous assess/full and
-// the classify endpoints firmly out of scope.
+// Only these actions are reachable through this app. Anything else is rejected
+// before it touches the agent — keeps the synchronous assess/full and the
+// classify endpoints firmly out of scope.
 const ALLOWED_ACTIONS = new Set([
   "tiers",
   "workspace/clone",
   "assess/full/start",
   "job/status",
+  "refine",
+  // read-only project history: list past assessments and reopen one by id
+  "list-projects",
+  "assess/result",
 ]);
 
 type RequestBody = {
