@@ -35,6 +35,24 @@ A fresh **AgentCore session id** (≥33 chars) is generated per assessment and s
 on the start call and every poll for session affinity. The in-flight `job_id` is
 persisted to `localStorage`, so a page refresh resumes polling.
 
+## Authentication
+
+Auth is fully delegated to the upstream **appcentral/Traefik gateway**, which
+authenticates the user and injects trusted `X-Auth-User-*` headers. There is no
+login/logout screen in this app — it reads the headers per request
+(`lib/auth.ts`), gates `/api/agent` on a present identity, and persists the user
+record via the agent's `user/upsert` action (surfaced at `GET /api/auth/me`).
+
+> **⚠️ Security-critical:** the app trusts these headers **without verification**,
+> so it is only safe when reachable **exclusively through the gateway** (Traefik
+> strips client-sent `X-Auth-User-*` before authenticating). **Never** add a
+> public ingress that bypasses the gateway — doing so lets anyone forge an
+> identity (including admin via `ADMIN_EMAILS`).
+
+Local dev has no gateway, so `proxy.ts` injects fake `DEV_USER_*` headers in
+development only (pass-through in production). Set `DEV_USER_EMAIL` to an
+`ADMIN_EMAILS` entry to run as admin locally. See [`.env.example`](.env.example).
+
 ## Architecture
 
 - **`app/page.tsx`** — client orchestrator: loads tiers, drives the form, the

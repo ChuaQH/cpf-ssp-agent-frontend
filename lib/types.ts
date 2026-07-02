@@ -109,6 +109,19 @@ export type JobStatusResponse = {
   error?: string;
 };
 
+// --- auth (gateway header identity) ------------------------------------------
+
+// The current user as returned by GET /api/auth/me to the browser — only public
+// profile fields (no tokens, no credentials). Mapped server-side from the agent's
+// persisted user record (gateway_id → id, display_name → name, avatar_url → image).
+export type AuthUser = {
+  id: string; // gateway id (opaque better-auth string)
+  email: string;
+  name: string;
+  image: string | null;
+  role: "user" | "admin";
+};
+
 // --- project history (list-projects / assess/result) -------------------------
 
 export type ProjectSummary = {

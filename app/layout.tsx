@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { AuthProvider } from "@/lib/use-auth";
+import { AuthGate } from "@/components/AuthGate";
 
 export const metadata: Metadata = {
   title: "CPF SSP Agent — IM8 Compliance Assessment",
@@ -14,7 +16,13 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        {/* AuthProvider fetches the session once; AuthGate blocks the app until
+            a gateway identity is present (or shows a return-to-portal message). */}
+        <AuthProvider>
+          <AuthGate>{children}</AuthGate>
+        </AuthProvider>
+      </body>
     </html>
   );
 }

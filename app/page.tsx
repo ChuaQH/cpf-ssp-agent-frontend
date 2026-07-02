@@ -13,6 +13,7 @@ import { ProgressView } from "@/components/ProgressView";
 import { ResultsView } from "@/components/ResultsView";
 import { RefinePanel } from "@/components/RefinePanel";
 import { ProjectsList } from "@/components/ProjectsList";
+import { UserBadge } from "@/components/UserBadge";
 import { useAssessment } from "@/lib/use-assessment";
 
 type TiersState =
@@ -118,9 +119,12 @@ export default function Home() {
   return (
     <main className="mx-auto min-h-screen max-w-3xl px-4 py-10">
       <header className="mb-8">
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-          CPF SSP Agent
-        </h1>
+        <div className="flex items-start justify-between gap-4">
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+            CPF SSP Agent
+          </h1>
+          <UserBadge />
+        </div>
         <p className="mt-1 text-sm text-slate-500">
           Automated IM8 compliance assessment for Singapore Government systems.
           Point it at a repository, pick an SSP tier, and download the gap

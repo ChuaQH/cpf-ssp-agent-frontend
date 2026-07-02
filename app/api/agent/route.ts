@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { invokeAgent } from "@/lib/agent";
+import { requireAuth } from "@/lib/auth";
 
 // This route must run on the Node.js runtime (AWS SDK + crypto), never edge.
 export const runtime = "nodejs";
@@ -26,6 +27,27 @@ const ALLOWED_ACTIONS = new Set([
   "assess/result",
 ]);
 
+// Project-scoped actions the agent owns per-user: each stores/reads artifacts
+// under <owner>/<project>/… and REQUIRES the authenticated owner id (gateway_id).
+// We inject it from the session server-side (below), so it can't be forged by the
+// browser. Superset of what this app currently calls (assess/gather, remediate,
+// etc. aren't in ALLOWED_ACTIONS today) — kept complete so identity is injected
+// correctly if any are ever allowlisted. `tiers`/`chat`/`classify`/
+// `domain-grouping` are NOT here — they have no owner dimension.
+const PROJECT_ACTIONS = new Set([
+  "workspace/clone",
+  "assess/gather",
+  "assess/evaluate",
+  "assess/full",
+  "assess/full/start",
+  "assess/result",
+  "list-projects",
+  "job/status",
+  "refine",
+  "remediate",
+  "fill-ssp",
+]);
+
 type RequestBody = {
   action?: unknown;
   // session id for AgentCore affinity; forwarded, not part of the agent payload
@@ -34,6 +56,11 @@ type RequestBody = {
 };
 
 export async function POST(req: Request) {
+  // Gate on a gateway identity before touching the agent (and the secrets behind
+  // it). Stateless header-presence check — authenticate-only, no role gating.
+  const auth = await requireAuth();
+  if (auth.error) return auth.error;
+
   let body: RequestBody;
   try {
     body = (await req.json()) as RequestBody;
@@ -55,6 +82,17 @@ export async function POST(req: Request) {
   // Strip our transport-only field; everything else is the agent payload.
   const { sessionId, ...payload } = body;
   const sid = typeof sessionId === "string" ? sessionId : undefined;
+
+  // Identity is server-authoritative: never trust a client-supplied gateway_id.
+  // Drop any the browser sent, then inject the authenticated owner id for
+  // project-scoped actions. This is what enforces per-user ownership across the
+  // whole flow (clone → assess → poll → result → refine → list) — the same id
+  // that feeds user/upsert. Independent of `sessionId` (runtime affinity), which
+  // was already stripped above.
+  delete payload.gateway_id;
+  if (PROJECT_ACTIONS.has(action)) {
+    payload.gateway_id = auth.session.id;
+  }
 
   try {
     const result = await invokeAgent(payload, sid);
